@@ -1,0 +1,60 @@
+jobs: 
+ build:
+  docker:
+    - image:  cimg/node:14.21.2-browsers
+  resource_class: medium
+
+  steps:
+    - checkout
+    - run:
+       name: installing Google Chrome
+       command: |
+         wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+         sudo sh -c 'echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+         sudo apt-get update
+         sudo apt-get install google-chrome-stable --allow-unauthenticated
+    - run:
+       name: installing automation framework
+       command: |
+         npm install
+    - run:
+       name: installing allure-commandline
+       command: |
+         npm install allure-commandline -g
+    - run:
+       name: running tests
+       command: |
+         npx wdio wdio.conf.js
+    - run:
+       name: generating Allure report
+       command: |
+         allure generate ./results/allure-results --clean
+    - store_test_results:
+       path: results/allure-results
+    - store_artifacts:
+       path: allure-report
+       destination: allure-report
+    - run:
+       name: Push failure notification
+       command: |
+         curl -d '{  "payload": { "build_num": 1, "build_url": "'"$CIRCLE_BUILD_URL"'", "vcs_url":"'"$CIRCLE_COMPARE_URL"'", "branch":"'"$CIRCLE_BRANCH"'", "reponame":"'"$CIRCLE_PR_REPONAME"'", "username":"'"$CIRCLE_USERNAME"'", "status":"Failed"}}' -H "Content-Type: application/json" -X POST https://hooks.glip.com/webhook/6b41f825-5e81-4ae3-9429-3cd3854bc08b
+       when: on_fail
+
+workflows:
+ version: 2
+ commit:
+   jobs:
+    - build
+
+
+ nightly:
+   triggers:
+      - schedule:
+          cron: "1 21 * * *"
+          filters:
+            branches:
+              only:
+                - master
+
+   jobs:
+    - build
